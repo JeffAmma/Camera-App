@@ -1,3 +1,4 @@
+
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -9,30 +10,42 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.support.annotation.NonNull;
+import android.provider.ContactsContract;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CAMERA_PERMISSION_RESULTS = 0;
+    private static final int REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_RESULT = 1;
+
     private TextureView textureView;
+    private ImageButton imageButtonRecord;
+
     private TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
@@ -84,7 +97,14 @@ public class MainActivity extends AppCompatActivity {
 
     private String mCameraID;
     private Size mPreviewSize;
+    private Size mVideoSiZe;
+    private MediaRecorder mediaRecorder;
+    private int mTotalRotation;
     private CaptureRequest.Builder mCaptureRequestBuild;
+    private boolean mIsRecording = false;
+
+    private File mVideoFold;
+    private String mVideofileName;
 
 
     private static SparseIntArray ORIENTATIONS = new SparseIntArray();
@@ -108,7 +128,23 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        createVideoFolder();
+        mediaRecorder = new MediaRecorder();
+
         textureView = findViewById(R.id.textureView);
+        imageButtonRecord =findViewById(R.id.imageButtonVideo);
+        imageButtonRecord.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mIsRecording) { // now, previewing
+                    mIsRecording = false;
+                    imageButtonRecord.setImageResource(R.drawable.record_on);
+                } else {    // now, recording!!
+                    checkWriteStoragePermision();
+                }
+            }
+        });
+
     }
 
     @Override
@@ -124,12 +160,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,  int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if(requestCode == REQUEST_CAMERA_PERMISSION_RESULTS) {
             if(grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(getApplicationContext(),
                         "Application will not run without camera service", Toast.LENGTH_SHORT).show();
+            }
+        }
+        if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_RESULT) {
+            if ( grantResults[0] == PackageManager.PERMISSION_GRANTED ) {
+                mIsRecording =true;
+                imageButtonRecord.setImageResource(R.drawable.record_on);
+                createVideoFolder();
+                Toast.makeText(getApplicationContext(),
+                        "Permission successfully granted!!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getApplicationContext(),
+                        "App needs to save video to run", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -166,8 +214,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                 int deviceOrientation = getWindowManager().getDefaultDisplay().getRotation();
-                int totalOrientation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
-                Boolean swapRotation = totalOrientation == 90 || totalOrientation == 270;
+                mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
+                Boolean swapRotation = mTotalRotation == 90 || mTotalRotation == 270;
                 int rotateWidth = wd;
                 int rotateHeight = ht;
                 if (swapRotation) {
@@ -175,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
                     rotateHeight = wd;
                 }
                 mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotateWidth, rotateHeight);
+                mVideoSiZe = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotateWidth, rotateHeight);
                 mCameraID = cameraID;
                 return;
             }
@@ -283,4 +332,64 @@ public class MainActivity extends AppCompatActivity {
             return choices[0];
         }
     }
+
+    private void createVideoFolder() {
+        File movieFile =  Environment.getExternalStorageDirectory();
+        mVideoFold = new File(movieFile, "camera2VideoImage");
+        if (!mVideoFold.exists()) {
+            mVideoFold.mkdirs();
+        }
+    }
+
+    private File createVideoFileName() {
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String preend = "VIDEO_"+timestamp + "_";
+        File VideoFile = null;
+        try {
+            VideoFile = File.createTempFile(preend,".mp4", mVideoFold);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        mVideofileName = VideoFile.getAbsolutePath();
+        return VideoFile;
+    }
+
+    private void checkWriteStoragePermision() {
+        if ( Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                mIsRecording =true;
+                imageButtonRecord.setImageResource(R.drawable.record_off);
+                createVideoFileName();
+            } else {
+                if ( shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    Toast.makeText(getApplicationContext(), "App needs to be able to save videos", Toast.LENGTH_SHORT).show();
+                }
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                        REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_RESULT);
+            }
+        } else {
+            mIsRecording =true;
+            imageButtonRecord.setImageResource(R.drawable.record_off);
+            createVideoFileName();
+        }
+    }
+
+    private void setupMediaRecorder() {
+        mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+        mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        mediaRecorder.setOutputFile(mVideofileName);
+        mediaRecorder.setVideoEncodingBitRate(1000000);
+        mediaRecorder.setVideoFrameRate(30);
+        mediaRecorder.setVideoSize(mVideoSiZe.getWidth(), mVideoSiZe.getHeight());
+        mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+        mediaRecorder.setOrientationHint(mTotalRotation);
+        try {
+            mediaRecorder.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
 }
