@@ -15,7 +15,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.provider.ContactsContract;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -74,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onOpened(CameraDevice cameraDevice) {
             mCameraDevice = cameraDevice;
-            startPreview();
+
             if(mIsRecording) {
                 createVideoFileName();
                 startRecord();
@@ -143,11 +142,15 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 if (mIsRecording) { // now, previewing
                     mIsRecording = false;
-                    imageButtonRecord.setImageResource(R.drawable.record_on);
+                    imageButtonRecord.setImageResource(R.drawable.record_off);
+                    Toast.makeText(getApplicationContext(),
+                            "Now Video previewing!! ", Toast.LENGTH_SHORT).show();
                     mediaRecorder.stop();
                     mediaRecorder.reset();
                     startPreview();
                 } else {    // now, recording!!
+                    Toast.makeText(getApplicationContext(),
+                            "Now Video recording!! ", Toast.LENGTH_SHORT).show();
                     checkWriteStoragePermision();
                 }
             }
@@ -317,9 +320,7 @@ public class MainActivity extends AppCompatActivity {
                             } catch (CameraAccessException e) {
                                 e.printStackTrace();
                             }
-
                         }
-
                         @Override
                         public void onConfigureFailed(CameraCaptureSession session) {
                             Toast.makeText(getApplicationContext(), "Unable to setup camera preview", Toast.LENGTH_SHORT).show();
@@ -328,7 +329,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
-
     }
 
 
@@ -403,7 +403,7 @@ public class MainActivity extends AppCompatActivity {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED) {
                 mIsRecording =true;
-                imageButtonRecord.setImageResource(R.drawable.record_off);
+                imageButtonRecord.setImageResource(R.drawable.record_on);
                 createVideoFileName();
                 startRecord();
                 mediaRecorder.start();
